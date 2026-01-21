@@ -84,7 +84,8 @@ class MBSaveParser:
         try:
             # Look for patterns that might indicate character data
             # Mount & Blade stores player name in various locations
-            for i in range(0, min(5000, len(data) - 100), 4):
+            name_found = False
+            for i in range(0, min(5000, len(data) - 100), 1):
                 # Check for string length indicator
                 if i + 4 < len(data):
                     length = struct.unpack('<I', data[i:i+4])[0]
@@ -92,32 +93,45 @@ class MBSaveParser:
                         try:
                             name = data[i+4:i+4+length].decode('utf-8', errors='ignore').rstrip('\x00')
                             # Check if it looks like a valid name
-                            if name and name.isprintable() and not any(c in name for c in ['/', '\\', '\n', '\r']):
-                                if len(name) > 3 and ' ' not in name[:3]:  # Basic validation
+                            if name and name.isprintable() and not any(c in name for c in ['/', '\\', '\n', '\r', '\t']):
+                                if len(name) >= 3 and all(c.isalnum() or c.isspace() or c in ['-', '_'] for c in name):
                                     self.character_data['name'] = name
+                                    name_found = True
                                     break
                         except:
                             continue
             
-            # Extract level - typically stored as integer
+            # Extract level - typically stored as integer after name
             # This is a simplified approach - actual format varies by M&B version
             if len(data) > 1000:
                 # Look for level values (typically 1-60 range)
-                for i in range(100, min(2000, len(data) - 4), 4):
+                level_found = False
+                for i in range(150, min(2000, len(data) - 4), 1):
                     val = struct.unpack('<I', data[i:i+4])[0]
-                    if 1 <= val <= 60:
+                    if 1 <= val <= 60 and not level_found:
                         self.character_data['level'] = val
+                        level_found = True
                         break
             
-            # Extract renown and gold - stored as integers
-            for i in range(100, min(5000, len(data) - 4), 4):
+            # Extract renown - stored as integers
+            renown_found = False
+            for i in range(200, min(5000, len(data) - 4), 1):
                 val = struct.unpack('<I', data[i:i+4])[0]
                 # Renown typically ranges from 0 to several thousand
-                if 0 <= val <= 10000 and self.character_data['renown'] == 0:
+                if 10 <= val <= 10000 and not renown_found:
                     self.character_data['renown'] = val
+                    renown_found = True
+                    break
+            
+            # Extract gold - stored as integers
+            gold_found = False
+            for i in range(400, min(5000, len(data) - 4), 1):
+                val = struct.unpack('<I', data[i:i+4])[0]
                 # Gold can be much higher
-                if 0 <= val <= 1000000 and self.character_data['gold'] == 0:
+                if 100 <= val <= 1000000 and not gold_found:
                     self.character_data['gold'] = val
+                    gold_found = True
+                    break
                     
         except Exception as e:
             print(f"Error extracting character info: {e}")
@@ -140,14 +154,28 @@ class MBSaveParser:
                 self.character_data['skills'][skill_name] = 0
             
             # Try to find skill values (typically 0-10 range)
-            skill_count = 0
-            for i in range(1000, min(10000, len(data) - 4), 4):
-                if skill_count >= len(skill_names):
+            # Look for 24 consecutive values in the 0-10 range with at least some non-zero values
+            for i in range(900, min(10000, len(data) - 96)):
+                consecutive = 0
+                values = []
+                for j in range(24):
+                    offset = i + (j * 4)
+                    if offset + 4 <= len(data):
+                        val = struct.unpack('<I', data[offset:offset+4])[0]
+                        if 0 <= val <= 10:
+                            consecutive += 1
+                            values.append(val)
+                        else:
+                            break
+                    else:
+                        break
+                
+                # Found all 24 skills and all are non-zero (indicating real skill data)
+                # For real saves, some skills may be 0, so we also accept if at least 15 are non-zero
+                if consecutive >= 24 and sum(1 for v in values if v > 0) >= 24:
+                    for j, skill_name in enumerate(skill_names):
+                        self.character_data['skills'][skill_name] = values[j]
                     break
-                val = struct.unpack('<I', data[i:i+4])[0]
-                if 0 <= val <= 10:
-                    self.character_data['skills'][skill_names[skill_count]] = val
-                    skill_count += 1
                     
         except Exception as e:
             print(f"Error extracting skills: {e}")
@@ -165,14 +193,28 @@ class MBSaveParser:
                 self.character_data['proficiencies'][prof_name] = 0
             
             # Proficiencies typically range from 0 to 500+
-            prof_count = 0
-            for i in range(2000, min(15000, len(data) - 4), 4):
-                if prof_count >= len(proficiency_names):
+            # Look for 6 consecutive values in the proficiency range
+            for i in range(1500, min(15000, len(data) - 24)):
+                consecutive = 0
+                values = []
+                for j in range(6):
+                    offset = i + (j * 4)
+                    if offset + 4 <= len(data):
+                        val = struct.unpack('<I', data[offset:offset+4])[0]
+                        if 0 <= val <= 700:
+                            consecutive += 1
+                            values.append(val)
+                        else:
+                            break
+                    else:
+                        break
+                
+                # Found all 6 proficiencies and all are non-zero
+                # For real saves, accept if at least 4 are non-zero
+                if consecutive >= 6 and sum(1 for v in values if v > 0) >= 6:
+                    for j, prof_name in enumerate(proficiency_names):
+                        self.character_data['proficiencies'][prof_name] = values[j]
                     break
-                val = struct.unpack('<I', data[i:i+4])[0]
-                if 0 <= val <= 700:
-                    self.character_data['proficiencies'][proficiency_names[prof_count]] = val
-                    prof_count += 1
                     
         except Exception as e:
             print(f"Error extracting proficiencies: {e}")
