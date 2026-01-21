@@ -170,9 +170,9 @@ class MBSaveParser:
                     else:
                         break
                 
-                # Found all 24 skills and all are non-zero (indicating real skill data)
-                # For real saves, some skills may be 0, so we also accept if at least 15 are non-zero
-                if consecutive >= 24 and sum(1 for v in values if v > 0) >= 24:
+                # Found all 24 skills - for real saves some may be 0, so accept if at least 20 are non-zero
+                # This ensures we get actual skill data and not just padding zeros
+                if consecutive >= 24 and sum(1 for v in values if v > 0) >= 20:
                     for j, skill_name in enumerate(skill_names):
                         self.character_data['skills'][skill_name] = values[j]
                     break
@@ -209,9 +209,9 @@ class MBSaveParser:
                     else:
                         break
                 
-                # Found all 6 proficiencies and all are non-zero
-                # For real saves, accept if at least 4 are non-zero
-                if consecutive >= 6 and sum(1 for v in values if v > 0) >= 6:
+                # Found all 6 proficiencies - accept if at least 4 are non-zero
+                # This allows for saves where player hasn't trained all weapon types
+                if consecutive >= 6 and sum(1 for v in values if v > 0) >= 4:
                     for j, prof_name in enumerate(proficiency_names):
                         self.character_data['proficiencies'][prof_name] = values[j]
                     break
