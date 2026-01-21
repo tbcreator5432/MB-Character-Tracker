@@ -1,0 +1,4 @@
+# Core dependencies for MB Character Tracker
+# tkinter is included with Python standard library
+
+# For advanced parsing if needed
