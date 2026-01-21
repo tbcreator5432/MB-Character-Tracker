@@ -9,6 +9,11 @@ import struct
 import io
 
 
+# Constants for parsing thresholds
+MIN_NON_ZERO_SKILLS = 20  # Minimum non-zero skills to identify valid skill data
+MIN_NON_ZERO_PROFICIENCIES = 4  # Minimum non-zero proficiencies to identify valid proficiency data
+
+
 class MBSaveParser:
     """Parser for Mount & Blade save files."""
     
@@ -22,7 +27,7 @@ class MBSaveParser:
             length = struct.unpack('<I', file.read(4))[0]
             if length > 0 and length < 10000:  # Reasonable string length
                 return file.read(length).decode('utf-8', errors='ignore').rstrip('\x00')
-        except:
+        except (struct.error, IndexError, UnicodeDecodeError):
             pass
         return ""
     
@@ -30,14 +35,14 @@ class MBSaveParser:
         """Parse a 32-bit integer from the save file."""
         try:
             return struct.unpack('<I', file.read(4))[0]
-        except:
+        except struct.error:
             return 0
     
     def parse_float(self, file):
         """Parse a 32-bit float from the save file."""
         try:
             return struct.unpack('<f', file.read(4))[0]
-        except:
+        except struct.error:
             return 0.0
     
     def parse(self, filepath):
@@ -98,7 +103,7 @@ class MBSaveParser:
                                     self.character_data['name'] = name
                                     name_found = True
                                     break
-                        except:
+                        except (UnicodeDecodeError, IndexError):
                             continue
             
             # Extract level - typically stored as integer after name
@@ -172,7 +177,7 @@ class MBSaveParser:
                 
                 # Found all 24 skills - for real saves some may be 0, so accept if at least 20 are non-zero
                 # This ensures we get actual skill data and not just padding zeros
-                if consecutive >= 24 and sum(1 for v in values if v > 0) >= 20:
+                if consecutive >= 24 and sum(1 for v in values if v > 0) >= MIN_NON_ZERO_SKILLS:
                     for j, skill_name in enumerate(skill_names):
                         self.character_data['skills'][skill_name] = values[j]
                     break
@@ -211,7 +216,7 @@ class MBSaveParser:
                 
                 # Found all 6 proficiencies - accept if at least 4 are non-zero
                 # This allows for saves where player hasn't trained all weapon types
-                if consecutive >= 6 and sum(1 for v in values if v > 0) >= 4:
+                if consecutive >= 6 and sum(1 for v in values if v > 0) >= MIN_NON_ZERO_PROFICIENCIES:
                     for j, prof_name in enumerate(proficiency_names):
                         self.character_data['proficiencies'][prof_name] = values[j]
                     break
@@ -259,7 +264,7 @@ class MBSaveParser:
                                 'stats': stats
                             })
                             item_names.append(item_name)
-                except:
+                except (struct.error, UnicodeDecodeError, IndexError):
                     continue
                     
         except Exception as e:
